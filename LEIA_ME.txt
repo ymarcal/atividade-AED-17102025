@@ -1,0 +1,223 @@
+================================================================================
+  SCRIPTS DE AUTOMAÇÃO - ESTUDO PARAMÉTRICO CAMADA LIMITE LAMINAR
+  Disciplina: AED-26 (ITA)
+  Data: Outubro 2025
+================================================================================
+
+📦 ARQUIVOS CRIADOS
+================================================================================
+
+1. find_executables.py       - Localiza GMSH e SU2 no sistema
+2. generate_meshes.py         - Gera malhas parametricamente
+3. run_su2_batch.py           - Executa SU2 para múltiplas malhas
+4. run_parametric_study.py    - Workflow completo (RECOMENDADO)
+5. analyze_results.py         - Analisa e compara resultados
+
+6. requirements.txt           - Dependências Python
+7. README_scripts.md          - Documentação completa
+8. WORKFLOW_GUIDE.md          - Guia de workflow e casos de uso
+9. LEIA_ME.txt               - Este arquivo (resumo)
+
+================================================================================
+🚀 INÍCIO RÁPIDO (4 PASSOS)
+================================================================================
+
+PASSO 1: Localizar executáveis
+-------------------------------
+> python find_executables.py
+
+  Isso vai procurar GMSH e SU2 no seu computador.
+  Copie os caminhos fornecidos.
+
+
+PASSO 2: Ajustar caminhos (se necessário)
+------------------------------------------
+  Edite os arquivos Python e cole os caminhos:
+  
+  - generate_meshes.py (linha ~13)
+  - run_su2_batch.py (linha ~13)
+  - run_parametric_study.py (linhas ~23-24)
+  
+  Exemplo:
+    GMSH_PATH = r"C:\Program Files\gmsh-4.11.1-Windows64\gmsh.exe"
+    SU2_PATH = r"C:\Users\ymarc\OneDrive\Documents\SU2-v8.3.0-win64\win64\bin\SU2_CFD.exe"
+
+
+PASSO 3: Executar estudo paramétrico
+-------------------------------------
+> python run_parametric_study.py
+
+  Escolha o que você quer variar:
+  1. d_inlet (distância do inlet)
+  2. H_dom (altura do domínio)
+  3. Ambos (matriz completa)
+  4. Definir manualmente
+  
+  O script vai:
+  - Gerar as malhas no GMSH
+  - Executar SU2 para cada caso
+  - Organizar os resultados
+
+
+PASSO 4: Analisar resultados
+-----------------------------
+> pip install matplotlib pandas
+> python analyze_results.py
+
+  Escolha:
+  1. Gráficos individuais
+  2. Comparação por d_inlet
+  3. Comparação por H_dom
+  4. Tabela resumo
+  5. Tudo (recomendado)
+
+================================================================================
+📊 ARQUIVOS DE SAÍDA
+================================================================================
+
+Malhas Geradas:
+  mesh_d002_H03.su2, mesh_d004_H03.su2, ...
+
+Resultados SU2:
+  flow_d002_H03.vtu          - Campos (abrir no VISIT)
+  surface_flow_d002_H03.vtu  - Superfície
+  history_d002_H03.csv       - Convergência
+  restart_flow_d002_H03.dat  - Restart
+
+Análises:
+  convergence_d002_H03.png   - Gráficos de convergência
+  comparison_d_inlet.png     - Comparação por d_inlet
+  comparison_H_dom.png       - Comparação por H_dom
+  summary_results.csv        - Tabela com Cd e Cl
+
+================================================================================
+📚 DOCUMENTAÇÃO
+================================================================================
+
+README_scripts.md    - Documentação detalhada de cada script
+WORKFLOW_GUIDE.md    - Guia com exemplos e casos de uso
+                      (Leia para entender todo o processo!)
+
+================================================================================
+⏱️ TEMPO ESTIMADO
+================================================================================
+
+Por simulação:    5-15 minutos (depende do computador)
+8 casos:          ~1-2 horas
+12 casos:         ~1.5-3 horas
+
+DICA: Execute overnight para estudos grandes!
+
+================================================================================
+🎯 OBJETIVOS DO ESTUDO
+================================================================================
+
+1. Verificar independência da solução com d_inlet
+   → Solução não deve depender da distância do inlet
+
+2. Verificar independência da solução com H_dom
+   → Solução não deve depender da altura do domínio
+
+3. Comparar Cd numérico com teoria de Blasius
+   → Cf = 0.664 / √(Re_x)
+
+4. Estudar distribuição de pressão na linha de simetria
+
+================================================================================
+💡 DICAS
+================================================================================
+
+✓ Comece com 2-3 casos para testar
+✓ Verifique convergência nos arquivos .csv
+✓ Compare com teoria de Blasius
+✓ Organize resultados em pastas
+✓ Faça backup dos arquivos importantes
+
+================================================================================
+🐛 PROBLEMAS COMUNS
+================================================================================
+
+"GMSH não encontrado"
+→ Baixe em: https://gmsh.info/#Download
+→ Execute find_executables.py novamente
+
+"SU2 não encontrado"
+→ Baixe em: https://su2code.github.io/download.html
+→ Corrija o caminho no script
+
+"Simulação não converge"
+→ Aumente ITER no lam_flatplate.cfg
+→ Refine a malha no placa_mod.geo
+
+"Falta matplotlib ou pandas"
+→ pip install matplotlib pandas
+
+================================================================================
+📖 EXEMPLO DE USO COMPLETO
+================================================================================
+
+# 1. Localizar executáveis
+> python find_executables.py
+  [Copiar caminhos]
+
+# 2. Executar estudo variando d_inlet
+> python run_parametric_study.py
+  Opção: 1
+  Valores padrão: s
+  Iniciar: s
+  [Aguardar ~1-2 horas]
+
+# 3. Analisar resultados
+> pip install matplotlib pandas
+> python analyze_results.py
+  Opção: 5 (análise completa)
+
+# 4. Visualizar no VISIT
+> Abrir flow_d016_H03.vtu
+> Add → Pseudocolor → Velocity
+> Add → Vector → Velocity_
+> Draw
+
+# 5. Verificar convergência
+> Abrir history_d016_H03.csv no Excel
+> Plotar coluna "rms_Density" vs "Inner_Iter"
+
+================================================================================
+✅ CHECKLIST
+================================================================================
+
+Antes de começar:
+[ ] Python instalado
+[ ] GMSH instalado
+[ ] SU2 instalado
+[ ] lam_flatplate.cfg presente
+[ ] placa_mod.geo presente
+[ ] Espaço em disco (~100 MB por caso)
+
+Durante execução:
+[ ] Monitorar terminal por erros
+[ ] Verificar convergência
+
+Após execução:
+[ ] Arquivos .vtu gerados
+[ ] Arquivos .csv com dados
+[ ] Gráficos .png criados
+[ ] Comparar com teoria
+
+================================================================================
+📞 SUPORTE
+================================================================================
+
+Documentação SU2:   https://su2code.github.io/docs_v7/home/
+Documentação GMSH:  https://gmsh.info/doc/texinfo/gmsh.html
+Tutorial:           https://su2code.github.io/tutorials/Laminar_Flat_Plate/
+
+================================================================================
+
+Boa sorte com suas simulações! 🚀
+
+Para começar agora: python find_executables.py
+
+================================================================================
+
+

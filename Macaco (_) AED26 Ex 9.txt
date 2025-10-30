@@ -1,0 +1,41 @@
+Macaco (?) AED26: Ex. 9
+
+Vamos analisar tudo sob a perspectiva do Cd (será sua função f)
+Antes de mais dúvidas, eu ainda não fiz tudo, então estamos no mesmo barco.
+
+Uma explicação do .geo: https://gemini.google.com/share/9b65abef3cc6
+
+O caminho geral será:
+
+Um pouco de refinamento -> Item A (expansão de domínio🤞🏼) -> Item B (refinamento final) -> Comparação com Blasius laminar.
+
+1) Refine um pouco a malha original de modo que o Rk caia no intervalo monotônico (0 < Rk < 1). Ou seja, você vai ter que refinar no mínimo 3 vezes para verificar isso. Usar aquela opção Refine do GMSH vai ser essencial para todos os refinamentos ao longo desse exercício.
+
+2) Item A: a expansão de domínio se dará em duas partes.
+
+O critério de parada do aumento de uma malha para a outra serão as linhas de pressão.
+
+i) Inlet: não é só aumentar o tamanho do inlet. Deve-se atentar ao tamanho dos dois elementos da transição entre o Inlet e a Placa, na primeira camada. Eles devem ser aproximadamente iguais em largura (em altura eles já são por padrão).
+Ou seja, deve-se mexer no tamanho das linhas que definem a largura do inlet, na quantidade de elementos de suas respectivas curvas "Transfinite" (são as de 25 elementos) e na razão da PG que as definem (é bom escrever à mão a PG, caso se queira mexer com ela).
+
+Ainda, pode-se manter a PG intacta e só anexar mais blocos continuando a PG original.
+
+*Repare que a gente não está mexendo com o tamanho da placa.
+
+Seu critério de parada aqui será quando as linhas de pressão à frente do bordo de ataque pararem de se mexer de uma mesh para a outra.
+
+Obs.: colocar o cursor sobre cada curva que forma nossa geometria faz aparecer um caixinha com todas as infos pertinentes.
+
+ii) Expansão em altura: aqui, deve-se atentar para que a altura da primeira camada se mantenha igual à primeira mesh.
+
+A lógica de operação é a mesma. Mas o critério de parada serão as linhas de pressão acima do bordo de ataque.
+
+3) Item B: refinamento final
+
+O refinamento, assim como no início será feito usando o Refine. O critério de parada é quando o GCI parar de aumentar de uma iteração para a outra. Repare que cada valor de GCI necessita de duas malhas para ser calculado, ainda, repare que como faremos mais de três malhas aqui, é necessário usar o Fs = 1.25.
+
+Quanto ao cálculo do GCI propriamente dito, repare que no denominador tem um r^p, esse p é a ordem de precisão. Ela é calculada da forma que fizemos no entregável 2, aquele gráfico Log(erro da variável em análise (aqui, Cd)) x Log(número de elementos). Uma sugestão é rodar umas 5-6 malhas, calcular o Log-Log e calcular o GCI, espero que já tenha convergido aí, caso não, continua esse processo.
+
+3) Item C: dada a malha convergida, pega o Cd dela e compara com Blasius laminar (3° slide do André em AED01)
+
+É isso, talvez cês tenham dúvidas que eu ainda não saiba responder, mas vamo se ajudando aqui no grupo.
