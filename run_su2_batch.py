@@ -2,6 +2,7 @@
 Script para executar SU2 automaticamente para múltiplas malhas
 Autor: Script automatizado
 Data: 2025
+Versão: Paralela com multiprocessing
 """
 
 import os
@@ -9,12 +10,13 @@ import subprocess
 import shutil
 import glob
 from pathlib import Path
+from multiprocessing import Pool, cpu_count
+import time
 
 # Configurações
 # SU2_PATH = r"C:\Users\ymarc\OneDrive\Documents\SU2-v8.3.0-win64\win64\bin\SU2_CFD.exe"
 SU2_PATH = r"C:\Users\ymarc\OneDrive\Documents\SU2-v8.3.0-win64-mpi\win64-mpi\bin\SU2_CFD.exe"
 CONFIG_FILE = "lam_flatplate.cfg"
-CONFIG_BACKUP = "lam_flatplate.cfg.backup"
 
 def get_mesh_files():
     """Retorna lista de arquivos de malha a serem processados"""
@@ -23,88 +25,104 @@ def get_mesh_files():
     mesh_files.sort()  # Ordena alfabeticamente
     return mesh_files
 
-def backup_config():
-    """Faz backup do arquivo de configuração original"""
-    if os.path.exists(CONFIG_FILE):
-        shutil.copy2(CONFIG_FILE, CONFIG_BACKUP)
-        print(f"✓ Backup do arquivo de configuração criado: {CONFIG_BACKUP}")
-
-def restore_config():
-    """Restaura o arquivo de configuração original"""
-    if os.path.exists(CONFIG_BACKUP):
-        shutil.copy2(CONFIG_BACKUP, CONFIG_FILE)
-        os.remove(CONFIG_BACKUP)
-        print(f"✓ Arquivo de configuração restaurado")
-
-def modify_config(mesh_filename):
-    """Modifica o arquivo de configuração para usar a malha especificada"""
+def create_config_for_mesh(mesh_filename, mesh_id):
+    """Cria um arquivo de configuração específico para cada malha"""
+    config_temp = f"lam_flatplate_{mesh_id}.cfg"
+    
     with open(CONFIG_FILE, 'r') as f:
         lines = f.readlines()
     
-    # Modifica a linha MESH_FILENAME
-    with open(CONFIG_FILE, 'w') as f:
+    # Modifica as linhas necessárias para evitar conflitos entre processos paralelos
+    with open(config_temp, 'w') as f:
         for line in lines:
             if line.strip().startswith('MESH_FILENAME='):
                 f.write(f'MESH_FILENAME= {mesh_filename}\n')
+            elif line.strip().startswith('CONV_FILENAME='):
+                f.write(f'CONV_FILENAME= history_{mesh_id}\n')
+            elif line.strip().startswith('RESTART_FILENAME='):
+                f.write(f'RESTART_FILENAME= restart_flow_{mesh_id}.dat\n')
+            elif line.strip().startswith('VOLUME_FILENAME='):
+                f.write(f'VOLUME_FILENAME= flow_{mesh_id}\n')
+            elif line.strip().startswith('SURFACE_FILENAME='):
+                f.write(f'SURFACE_FILENAME= surface_flow_{mesh_id}\n')
             else:
                 f.write(line)
     
-    print(f"✓ Configuração modificada para usar malha: {mesh_filename}")
+    return config_temp
 
-def run_su2():
-    """Executa o SU2_CFD"""
-    print(f"\n{'='*60}")
-    print(f"Executando SU2...")
-    print(f"{'='*60}\n")
+def process_single_mesh(mesh_file):
+    """Processa uma única malha (função para ser executada em paralelo)"""
+    mesh_id = mesh_file.replace('mesh_', '').replace('.su2', '')
+    
+    print(f"\n[{mesh_id}] Iniciando processamento...")
+    start_time = time.time()
     
     try:
+        # Cria arquivo de configuração específico para esta malha
+        config_temp = create_config_for_mesh(mesh_file, mesh_id)
+        print(f"[{mesh_id}] Arquivo de configuração criado: {config_temp}")
+        
         # Executa o SU2
+        print(f"[{mesh_id}] Executando SU2_CFD...")
         result = subprocess.run(
-            [SU2_PATH, CONFIG_FILE],
-            capture_output=False,
+            [SU2_PATH, config_temp],
+            capture_output=True,
             text=True,
             check=True
         )
-        print(f"\n✓ SU2 executado com sucesso!")
-        return True
+        
+        # Remove arquivo de configuração temporário
+        if os.path.exists(config_temp):
+            os.remove(config_temp)
+        
+        elapsed_time = time.time() - start_time
+        print(f"[{mesh_id}] ✓ Concluído em {elapsed_time:.1f}s")
+        
+        return {
+            'mesh': mesh_file,
+            'success': True,
+            'time': elapsed_time,
+            'message': 'Sucesso'
+        }
+        
     except subprocess.CalledProcessError as e:
-        print(f"\n✗ Erro ao executar SU2!")
-        print(f"Código de erro: {e.returncode}")
-        return False
-    except FileNotFoundError:
-        print(f"\n✗ Erro: SU2_CFD.exe não encontrado em:")
-        print(f"  {SU2_PATH}")
-        print(f"\nVerifique se o caminho está correto.")
-        return False
-
-def rename_outputs(mesh_name):
-    """Renomeia os arquivos de saída com o nome da malha"""
-    # Extrai o identificador da malha (ex: d002_H03)
-    mesh_id = mesh_name.replace('mesh_', '').replace('.su2', '')
-    
-    # Lista de arquivos de saída a serem renomeados
-    output_files = {
-        'flow.vtu': f'flow_{mesh_id}.vtu',
-        'surface_flow.vtu': f'surface_flow_{mesh_id}.vtu',
-        'history.csv': f'history_{mesh_id}.csv',
-        'restart_flow.dat': f'restart_flow_{mesh_id}.dat'
-    }
-    
-    print(f"\nRenomeando arquivos de saída...")
-    for old_name, new_name in output_files.items():
-        if os.path.exists(old_name):
-            # Se o arquivo destino já existe, remove
-            if os.path.exists(new_name):
-                os.remove(new_name)
-            shutil.move(old_name, new_name)
-            print(f"  {old_name} → {new_name}")
-        else:
-            print(f"  ⚠ Arquivo não encontrado: {old_name}")
+        elapsed_time = time.time() - start_time
+        error_msg = f"Erro código {e.returncode}"
+        print(f"[{mesh_id}] ✗ {error_msg}")
+        
+        # Remove arquivo de configuração temporário em caso de erro
+        config_temp = f"lam_flatplate_{mesh_id}.cfg"
+        if os.path.exists(config_temp):
+            os.remove(config_temp)
+        
+        return {
+            'mesh': mesh_file,
+            'success': False,
+            'time': elapsed_time,
+            'message': error_msg
+        }
+        
+    except Exception as e:
+        elapsed_time = time.time() - start_time
+        error_msg = f"Exceção: {str(e)}"
+        print(f"[{mesh_id}] ✗ {error_msg}")
+        
+        # Remove arquivo de configuração temporário em caso de erro
+        config_temp = f"lam_flatplate_{mesh_id}.cfg"
+        if os.path.exists(config_temp):
+            os.remove(config_temp)
+        
+        return {
+            'mesh': mesh_file,
+            'success': False,
+            'time': elapsed_time,
+            'message': error_msg
+        }
 
 def main():
-    """Função principal"""
+    """Função principal com processamento paralelo"""
     print("\n" + "="*60)
-    print("Script de Execução Automatizada do SU2")
+    print("Script de Execução Automatizada do SU2 (PARALELO)")
     print("="*60 + "\n")
     
     # Verifica se o SU2 existe
@@ -130,54 +148,84 @@ def main():
     for i, mesh in enumerate(mesh_files, 1):
         print(f"  {i}. {mesh}")
     
+    # Detecta número de CPUs
+    num_cpus = cpu_count()
+    print(f"\nNúmero de CPUs disponíveis: {num_cpus}")
+    
+    # Pergunta quantos processos paralelos usar
+    print(f"\nQuantos processos paralelos deseja usar?")
+    print(f"  Recomendado: {max(1, num_cpus - 1)} (deixa 1 CPU livre)")
+    print(f"  Máximo: {num_cpus}")
+    
+    while True:
+        try:
+            num_processes = input(f"Número de processos [padrão: {max(1, num_cpus - 1)}]: ").strip()
+            if not num_processes:
+                num_processes = max(1, num_cpus - 1)
+            else:
+                num_processes = int(num_processes)
+            
+            if 1 <= num_processes <= num_cpus:
+                break
+            else:
+                print(f"  Valor deve estar entre 1 e {num_cpus}")
+        except ValueError:
+            print("  Valor inválido! Digite um número inteiro.")
+    
     # Confirmação do usuário
     print(f"\n{'='*60}")
-    response = input("Deseja processar todas essas malhas? (s/n): ")
+    print(f"Configuração:")
+    print(f"  Malhas: {len(mesh_files)}")
+    print(f"  Processos paralelos: {num_processes}")
+    print(f"{'='*60}")
+    response = input("\nDeseja iniciar o processamento? (s/n): ")
     if response.lower() != 's':
         print("Operação cancelada pelo usuário.")
         return
     
-    # Faz backup do arquivo de configuração
-    backup_config()
+    # Inicia processamento paralelo
+    print(f"\n{'='*60}")
+    print(f"INICIANDO PROCESSAMENTO PARALELO")
+    print(f"{'='*60}\n")
     
-    # Processa cada malha
-    success_count = 0
-    fail_count = 0
+    start_time_total = time.time()
     
-    try:
-        for i, mesh_file in enumerate(mesh_files, 1):
-            print(f"\n\n{'#'*60}")
-            print(f"# Processando malha {i}/{len(mesh_files)}: {mesh_file}")
-            print(f"{'#'*60}\n")
-            
-            # Modifica configuração
-            modify_config(mesh_file)
-            
-            # Executa SU2
-            success = run_su2()
-            
-            if success:
-                # Renomeia outputs
-                rename_outputs(mesh_file)
-                success_count += 1
-            else:
-                fail_count += 1
-                print(f"\n⚠ Falha ao processar {mesh_file}")
-                response = input("Deseja continuar com as próximas malhas? (s/n): ")
-                if response.lower() != 's':
-                    break
-        
-    finally:
-        # Sempre restaura o arquivo de configuração original
-        restore_config()
+    # Usa Pool para executar em paralelo
+    with Pool(processes=num_processes) as pool:
+        results = pool.map(process_single_mesh, mesh_files)
+    
+    total_time = time.time() - start_time_total
+    
+    # Processa resultados
+    success_count = sum(1 for r in results if r['success'])
+    fail_count = len(results) - success_count
+    
+    # Relatório detalhado
+    print(f"\n\n{'='*60}")
+    print(f"RELATÓRIO DETALHADO")
+    print(f"{'='*60}")
+    
+    print("\nSimulações bem-sucedidas:")
+    for r in results:
+        if r['success']:
+            print(f"  ✓ {r['mesh']}: {r['time']:.1f}s")
+    
+    if fail_count > 0:
+        print("\nSimulações com falha:")
+        for r in results:
+            if not r['success']:
+                print(f"  ✗ {r['mesh']}: {r['message']}")
     
     # Relatório final
-    print(f"\n\n{'='*60}")
+    print(f"\n{'='*60}")
     print(f"RELATÓRIO FINAL")
     print(f"{'='*60}")
-    print(f"Total de malhas processadas: {success_count + fail_count}")
+    print(f"Total de malhas processadas: {len(mesh_files)}")
     print(f"  ✓ Sucesso: {success_count}")
     print(f"  ✗ Falhas: {fail_count}")
+    print(f"\nTempo total: {total_time:.1f}s ({total_time/60:.1f} minutos)")
+    if success_count > 0:
+        print(f"Tempo médio por malha: {total_time/len(mesh_files):.1f}s")
     print(f"{'='*60}\n")
 
 if __name__ == "__main__":
