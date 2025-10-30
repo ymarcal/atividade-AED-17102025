@@ -10,6 +10,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from read_vtu import read_vtu
 
+# Diretórios
+BASE_DIR = r"C:\Users\ymarc\OneDrive\Desktop\ITA_2025\AED_26\Lab9_Atividade1710"
+DIR_HORIZONTAL = os.path.join(BASE_DIR, "Analise_Horizontal")
+DIR_VERTICAL = os.path.join(BASE_DIR, "Analise_Vertical")
+
 
 def find_nearest_point(df, x_target, y_target, tolerance=1e-3):
     """
@@ -126,12 +131,42 @@ def main():
     print(" " * 18 + "Linha: (-0.02, 0) até (0, 0)")
     print("=" * 70)
     
+    # Menu de escolha de diretório
+    print("\nEscolha o diretório para analisar:")
+    print("1. Análise Horizontal (variando x_inlet)")
+    print("2. Análise Vertical (variando H_dom)")
+    print("3. Diretório atual")
+    
+    choice = input("\nEscolha (1-3): ").strip()
+    
+    if choice == '1':
+        work_dir = DIR_HORIZONTAL
+        analysis_type = "Horizontal"
+    elif choice == '2':
+        work_dir = DIR_VERTICAL
+        analysis_type = "Vertical"
+    elif choice == '3':
+        work_dir = BASE_DIR
+        analysis_type = "Diretório atual"
+    else:
+        print("Opção inválida!")
+        return
+    
+    print(f"\nTipo de análise: {analysis_type}")
+    print(f"Diretório de trabalho: {work_dir}")
+    
+    # Verifica se o diretório existe
+    if not os.path.exists(work_dir):
+        print(f"\n✗ ERRO: Diretório não encontrado!")
+        return
+    
     # Encontra arquivos VTU (ordenados por nome)
-    vtu_files = sorted(glob.glob('flow_d*.vtu'))
+    vtu_pattern = os.path.join(work_dir, 'flow_d*.vtu')
+    vtu_files = sorted(glob.glob(vtu_pattern))
     
     if not vtu_files:
-        print("\n✗ Nenhum arquivo flow_d*.vtu encontrado!")
-        print("  Certifique-se de estar no diretório correto.")
+        print(f"\n✗ Nenhum arquivo flow_d*.vtu encontrado em {work_dir}!")
+        print("  Execute o script run_su2_batch.py primeiro.")
         return
     
     print(f"\n✓ Encontrados {len(vtu_files)} arquivos:")
@@ -218,7 +253,7 @@ def main():
         print(f"  Máximo:     {np.max(diff_values):+.6f} Pa")
     
     # Salva resultados em CSV
-    output_csv = 'pressure_comparison_line.csv'
+    output_csv = os.path.join(work_dir, 'pressure_comparison_line.csv')
     df_results.to_csv(output_csv, index=False)
     print(f"\n" + "=" * 70)
     print(f"✓ Resultados salvos em: {output_csv}")
@@ -254,7 +289,7 @@ def main():
     axes[1].axvline(0, color='red', linestyle='--', alpha=0.5)
     
     plt.tight_layout()
-    output_plot = 'pressure_comparison_line.png'
+    output_plot = os.path.join(work_dir, 'pressure_comparison_line.png')
     plt.savefig(output_plot, dpi=150, bbox_inches='tight')
     print(f"✓ Gráfico salvo em: {output_plot}")
     
@@ -286,7 +321,7 @@ def main():
         cbar.set_label('ΔPressão (Pa)', rotation=270, labelpad=20)
         
         plt.tight_layout()
-        output_heatmap = 'pressure_heatmap.png'
+        output_heatmap = os.path.join(work_dir, 'pressure_heatmap.png')
         plt.savefig(output_heatmap, dpi=150, bbox_inches='tight')
         print(f"✓ Mapa de calor salvo em: {output_heatmap}")
     

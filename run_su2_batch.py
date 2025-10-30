@@ -18,16 +18,22 @@ import time
 SU2_PATH = r"C:\Users\ymarc\OneDrive\Documents\SU2-v8.3.0-win64-mpi\win64-mpi\bin\SU2_CFD.exe"
 CONFIG_FILE = "lam_flatplate.cfg"
 
-def get_mesh_files():
+# Diretórios
+BASE_DIR = r"C:\Users\ymarc\OneDrive\Desktop\ITA_2025\AED_26\Lab9_Atividade1710"
+DIR_HORIZONTAL = os.path.join(BASE_DIR, "Analise_Horizontal")
+DIR_VERTICAL = os.path.join(BASE_DIR, "Analise_Vertical")
+
+def get_mesh_files(directory):
     """Retorna lista de arquivos de malha a serem processados"""
-    # Busca todas as malhas mesh_*.su2 (excluindo mesh.su2 e mesh_out.su2)
-    mesh_files = glob.glob("mesh_d*.su2")
+    # Busca todas as malhas mesh_*.su2 no diretório especificado
+    search_pattern = os.path.join(directory, "mesh_d*.su2")
+    mesh_files = glob.glob(search_pattern)
     mesh_files.sort()  # Ordena alfabeticamente
     return mesh_files
 
-def create_config_for_mesh(mesh_filename, mesh_id):
+def create_config_for_mesh(mesh_filename, mesh_id, output_dir):
     """Cria um arquivo de configuração específico para cada malha"""
-    config_temp = f"lam_flatplate_{mesh_id}.cfg"
+    config_temp = os.path.join(output_dir, f"lam_flatplate_{mesh_id}.cfg")
     
     with open(CONFIG_FILE, 'r') as f:
         lines = f.readlines()
@@ -38,28 +44,32 @@ def create_config_for_mesh(mesh_filename, mesh_id):
             if line.strip().startswith('MESH_FILENAME='):
                 f.write(f'MESH_FILENAME= {mesh_filename}\n')
             elif line.strip().startswith('CONV_FILENAME='):
-                f.write(f'CONV_FILENAME= history_{mesh_id}\n')
+                f.write(f'CONV_FILENAME= {os.path.join(output_dir, f"history_{mesh_id}")}\n')
             elif line.strip().startswith('RESTART_FILENAME='):
-                f.write(f'RESTART_FILENAME= restart_flow_{mesh_id}.dat\n')
+                f.write(f'RESTART_FILENAME= {os.path.join(output_dir, f"restart_flow_{mesh_id}.dat")}\n')
             elif line.strip().startswith('VOLUME_FILENAME='):
-                f.write(f'VOLUME_FILENAME= flow_{mesh_id}\n')
+                f.write(f'VOLUME_FILENAME= {os.path.join(output_dir, f"flow_{mesh_id}")}\n')
             elif line.strip().startswith('SURFACE_FILENAME='):
-                f.write(f'SURFACE_FILENAME= surface_flow_{mesh_id}\n')
+                f.write(f'SURFACE_FILENAME= {os.path.join(output_dir, f"surface_flow_{mesh_id}")}\n')
             else:
                 f.write(line)
     
     return config_temp
 
-def process_single_mesh(mesh_file):
+def process_single_mesh(args):
     """Processa uma única malha (função para ser executada em paralelo)"""
-    mesh_id = mesh_file.replace('mesh_', '').replace('.su2', '')
+    mesh_file, output_dir = args
+    
+    # Extrai o mesh_id do nome do arquivo
+    mesh_basename = os.path.basename(mesh_file)
+    mesh_id = mesh_basename.replace('mesh_', '').replace('.su2', '')
     
     print(f"\n[{mesh_id}] Iniciando processamento...")
     start_time = time.time()
     
     try:
         # Cria arquivo de configuração específico para esta malha
-        config_temp = create_config_for_mesh(mesh_file, mesh_id)
+        config_temp = create_config_for_mesh(mesh_file, mesh_id, output_dir)
         print(f"[{mesh_id}] Arquivo de configuração criado: {config_temp}")
         
         # Executa o SU2
@@ -91,7 +101,7 @@ def process_single_mesh(mesh_file):
         print(f"[{mesh_id}] ✗ {error_msg}")
         
         # Remove arquivo de configuração temporário em caso de erro
-        config_temp = f"lam_flatplate_{mesh_id}.cfg"
+        config_temp = os.path.join(output_dir, f"lam_flatplate_{mesh_id}.cfg")
         if os.path.exists(config_temp):
             os.remove(config_temp)
         
@@ -108,7 +118,7 @@ def process_single_mesh(mesh_file):
         print(f"[{mesh_id}] ✗ {error_msg}")
         
         # Remove arquivo de configuração temporário em caso de erro
-        config_temp = f"lam_flatplate_{mesh_id}.cfg"
+        config_temp = os.path.join(output_dir, f"lam_flatplate_{mesh_id}.cfg")
         if os.path.exists(config_temp):
             os.remove(config_temp)
         
@@ -137,11 +147,41 @@ def main():
         print(f"  Arquivo: {CONFIG_FILE}")
         return
     
+    # Menu de escolha de diretório
+    print("Escolha o diretório para processar:")
+    print("1. Análise Horizontal (variando x_inlet)")
+    print("2. Análise Vertical (variando H_dom)")
+    print("3. Diretório atual")
+    
+    choice = input("\nEscolha (1-3): ").strip()
+    
+    if choice == '1':
+        work_dir = DIR_HORIZONTAL
+        analysis_type = "Horizontal"
+    elif choice == '2':
+        work_dir = DIR_VERTICAL
+        analysis_type = "Vertical"
+    elif choice == '3':
+        work_dir = BASE_DIR
+        analysis_type = "Diretório atual"
+    else:
+        print("Opção inválida!")
+        return
+    
+    print(f"\nTipo de análise: {analysis_type}")
+    print(f"Diretório de trabalho: {work_dir}")
+    
+    # Verifica se o diretório existe
+    if not os.path.exists(work_dir):
+        print(f"\n✗ ERRO: Diretório não encontrado!")
+        print(f"  Crie o diretório primeiro ou gere as malhas.")
+        return
+    
     # Obtém lista de malhas
-    mesh_files = get_mesh_files()
+    mesh_files = get_mesh_files(work_dir)
     
     if not mesh_files:
-        print("✗ Nenhuma malha encontrada no padrão 'mesh_d*.su2'")
+        print(f"\n✗ Nenhuma malha encontrada no padrão 'mesh_d*.su2' em {work_dir}")
         return
     
     print(f"Malhas encontradas: {len(mesh_files)}")
@@ -190,9 +230,12 @@ def main():
     
     start_time_total = time.time()
     
+    # Prepara argumentos para cada malha (mesh_file, output_dir)
+    mesh_args = [(mesh_file, work_dir) for mesh_file in mesh_files]
+    
     # Usa Pool para executar em paralelo
     with Pool(processes=num_processes) as pool:
-        results = pool.map(process_single_mesh, mesh_files)
+        results = pool.map(process_single_mesh, mesh_args)
     
     total_time = time.time() - start_time_total
     

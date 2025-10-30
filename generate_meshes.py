@@ -15,6 +15,11 @@ GMSH_PATH = r"C:\Users\ymarc\OneDrive\Desktop\ITA_2025\AED_26\Lab 3\gmsh-4.14.0-
 GEO_TEMPLATE = "placa_mod.geo"
 GEO_TEMP = "placa_temp.geo"
 
+# Diretórios de saída
+BASE_DIR = r"C:\Users\ymarc\OneDrive\Desktop\ITA_2025\AED_26\Lab9_Atividade1710"
+DIR_HORIZONTAL = os.path.join(BASE_DIR, "Analise_Horizontal")
+DIR_VERTICAL = os.path.join(BASE_DIR, "Analise_Vertical")
+
 def find_gmsh():
     """Tenta encontrar o executável do GMSH em locais comuns"""
     possible_paths = [
@@ -42,34 +47,49 @@ def find_gmsh():
     
     return None
 
-def create_geo_file(x_inlet, H_dom, output_geo):
+def create_geo_file(x_inlet, H_dom, output_geo, choice):
     """Cria arquivo .geo com parâmetros especificados"""
 
+    # Cálculo de x_inlet corrigido (progressão horizontal)
     rh=1.12
     lh0=0.02/(1+(rh**24))
-    n = np.floor(np.log(-x_inlet*(rh-1)/lh0 + 1)/np.log(rh))
-    x_inlet_final = -lh0*(rh**n - 1)/(rh-1)
+    n_h = np.floor(np.log(-x_inlet*(rh-1)/lh0 + 1)/np.log(rh))
+    
+    # Cálculo de H_dom corrigido (progressão vertical)
+    rv=1.2
+    lv0=0.3048/(1+(rv**64))  # Comprimento inicial vertical (baseado no comprimento da placa)
+    n_v = np.floor(np.log(H_dom*(rv-1)/lv0 + 1)/np.log(rv))
+
+    if choice == '1':
+        x_inlet_final = -lh0*(rh**n_h - 1)/(rh-1)
+        H_dom_final = H_dom
+    else:
+        x_inlet_final = x_inlet
+        H_dom_final = lv0*(rv**n_v - 1)/(rv-1)
     
     # Printar valores originais e corrigidos
     print(f"  x_inlet (original) = {x_inlet:.6f}")
     print(f"  x_inlet_final (corrigido) = {x_inlet_final:.6f}")
-    print(f"  Diferença = {abs(x_inlet - x_inlet_final):.6f}")
+    print(f"  Diferença x_inlet = {abs(x_inlet - x_inlet_final):.6f}")
+    print(f"  H_dom (original) = {H_dom:.6f}")
+    print(f"  H_dom_final (corrigido) = {H_dom_final:.6f}")
+    print(f"  Diferença H_dom = {abs(H_dom - H_dom_final):.6f}")
     
     # Template do arquivo .geo
     geo_content = f"""h=1.0;
 rh={rh};
-rv=1.2;
+rv={rv};
 x_inlet={x_inlet_final};
 
-// H_dom = {H_dom};
+// H_dom = {H_dom_final};
 
 // Point(1)={{-0.02,0,0,h}};
 Point(1)={{x_inlet,0,0,h}};
 Point(2)={{0,0,0,h}};
 Point(3)={{0.3048,0,0,h}};
-Point(4)={{0.3048,0.03,0,h}};
-Point(5)={{0,0.03,0,h}};
-Point(6)={{x_inlet,0.03,0,h}};
+Point(4)={{0.3048,{H_dom_final},0,h}};
+Point(5)={{0,{H_dom_final},0,h}};
+Point(6)={{x_inlet,{H_dom_final},0,h}};
 
 Line(1)={{1,2}};
 Line(2)={{2,3}};
@@ -79,13 +99,13 @@ Line(5)={{5,6}};
 Line(6)={{6,1}};
 
 // Transfinite Curve {{1}} = 25 Using Progression 1/rh; 
-Transfinite Curve {{1}} = {int(n)} Using Progression 1/rh; 
+Transfinite Curve {{1}} = {int(n_h)} Using Progression 1/rh; 
 Transfinite Curve {{2}} = 41 Using Progression rh;
-Transfinite Curve {{3}} = 65 Using Progression rv;
+Transfinite Curve {{3}} = {int(n_v)} Using Progression rv;
 Transfinite Curve {{4}} = 41 Using Progression 1/rh;
 // Transfinite Curve {{5}} = 25 Using Progression rh;
-Transfinite Curve {{5}} = {int(n)} Using Progression rh;
-Transfinite Curve {{6}} = 65 Using Progression 1/rv;
+Transfinite Curve {{5}} = {int(n_h)} Using Progression rh;
+Transfinite Curve {{6}} = {int(n_v)} Using Progression 1/rv;
 
 
 Curve Loop(1) = {{1,2,3,4,5,6}};
@@ -104,8 +124,8 @@ Physical Surface ('domain') = {{1}};
     
     print(f"  [OK] Arquivo .geo criado com x_inlet={x_inlet}, H_dom={H_dom}")
     
-    # Retorna o x_inlet_final para ser usado na nomenclatura do arquivo
-    return x_inlet_final
+    # Retorna os valores finais corrigidos para serem usados na nomenclatura do arquivo
+    return x_inlet_final, H_dom_final
 
 def generate_mesh(geo_file, output_su2, gmsh_path):
     """Executa GMSH para gerar malha em formato SU2"""
@@ -176,7 +196,7 @@ def main():
     
     print("Escolha o modo de geração:")
     print("1. Variar apenas x_inlet (H_dom fixo em 0.03)")
-    print("2. Variar apenas H_dom (x_inlet fixo em -0.16)")
+    print("2. Variar apenas H_dom (x_inlet fixo em -0.07)")
     print("3. Variar ambos os parâmetros (matriz de combinações)")
     print("4. Definir parâmetros manualmente")
     
@@ -197,9 +217,9 @@ def main():
             parameters.append((d, H_dom, mesh_id))
     
     elif choice == '2':
-        # Variar H_dom
-        x_inlet = -0.16
-        H_dom_values = [0.03, 0.06, 0.09, 0.12, 0.15, 0.18, 0.21, 0.24, 0.27, 0.30]
+        # Variar H_dom (mantendo x_inlet fixo em -0.07)
+        x_inlet = -0.07
+        H_dom_values = [0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.10, 0.12, 0.14, 0.16, 0.18, 0.20, 0.22, 0.24, 0.26, 0.28, 0.30]
         
         for h in H_dom_values:
             mesh_id = f"d{int(abs(x_inlet)*100):03d}_H{int(h*100):02d}"
@@ -247,6 +267,25 @@ def main():
     for i, (d, h, mesh_id) in enumerate(parameters, 1):
         print(f"  {i}. mesh_{mesh_id}.su2 (x_inlet={d:.4f}, H_dom={h:.4f})")
     
+    # Define diretório de saída baseado no tipo de análise
+    if choice == '1':
+        output_dir = DIR_HORIZONTAL
+        analysis_type = "Horizontal (variando x_inlet)"
+    elif choice == '2':
+        output_dir = DIR_VERTICAL
+        analysis_type = "Vertical (variando H_dom)"
+    else:
+        output_dir = BASE_DIR
+        analysis_type = "Combinada"
+    
+    # Cria diretório se não existir
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"\n[OK] Diretório criado: {output_dir}")
+    
+    print(f"\nTipo de análise: {analysis_type}")
+    print(f"Diretório de saída: {output_dir}")
+    
     # Confirmação
     response = input("\nDeseja gerar todas essas malhas? (s/n): ").strip().lower()
     if response != 's':
@@ -263,15 +302,15 @@ def main():
         print(f"# x_inlet = {x_inlet:.4f}, H_dom = {H_dom:.4f}")
         print(f"{'#'*60}")
         
-        # Cria arquivo .geo temporário e obtém x_inlet_final
-        x_inlet_final = create_geo_file(x_inlet, H_dom, GEO_TEMP)
+        # Cria arquivo .geo temporário e obtém valores corrigidos
+        x_inlet_final, H_dom_final = create_geo_file(x_inlet, H_dom, GEO_TEMP, choice)
         
-        # Atualiza mesh_id com o valor corrigido de x_inlet_final
-        mesh_id_final = f"d{int(abs(x_inlet_final)*100):03d}_H{int(H_dom*100):02d}"
+        # Atualiza mesh_id com os valores corrigidos
+        mesh_id_final = f"d{int(abs(x_inlet_final)*100):03d}_H{int(H_dom_final*100):02d}"
         print(f"  mesh_id atualizado: {mesh_id} -> {mesh_id_final}")
         
-        # Gera malha com o nome atualizado
-        output_file = f"mesh_{mesh_id_final}.su2"
+        # Gera malha com o nome atualizado no diretório correto
+        output_file = os.path.join(output_dir, f"mesh_{mesh_id_final}.su2")
         success = generate_mesh(GEO_TEMP, output_file, gmsh_path)
         
         if success:
